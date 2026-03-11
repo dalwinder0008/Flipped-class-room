@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: reviews
+    // Document ID: reviewId (RVYYMMDD-XXXX)
+    // Fields:
+    //   - id: string (required) - Unique review ID
+    //   - student_name: string (required) - Name of the student
+    //   - email: string (required) - Email of the student
+    //   - rating: number (required, 1-5) - Rating
+    //   - content: string (required, < 500 chars) - Review text
+    //   - sentiment: string (required) - Positive, Neutral, Negative
+    //   - confidence: number (optional) - AI confidence
+    //   - keywords: list (optional) - Extracted keywords
+    //   - created_at: string (required) - ISO date string
+    //   - uid: string (required) - Auth UID
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['id', 'student_name', 'email', 'rating', 'content', 'sentiment', 'uid', 'created_at']) &&
+             data.student_name is string && data.student_name.size() > 0 && data.student_name.size() < 100 &&
+             data.email is string && data.email == request.auth.token.email &&
+             data.rating is int && data.rating >= 1 && data.rating <= 5 &&
+             data.content is string && data.content.size() >= 10 && data.content.size() <= 500 &&
+             data.sentiment in ['Positive', 'Neutral', 'Negative'] &&
+             data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /reviews/{userId} {
+      // Anyone authenticated can read reviews for the dashboard
+      allow read: if isAuthenticated();
+      
+      // Users can create a review if they are authenticated and it's their own UID
+      // Using userId as the document ID ensures uniqueness per user
+      allow create: if isOwner(userId) && isValidReview(request.resource.data);
+      
+      // Users can update their own review
+      allow update: if isOwner(userId) && isValidReview(request.resource.data);
+      
+      // Only owners can delete
+      allow delete: if isOwner(userId);
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
