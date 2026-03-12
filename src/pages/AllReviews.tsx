@@ -3,7 +3,7 @@ import { Search, Filter, SlidersHorizontal, Loader2 } from "lucide-react";
 import ReviewCard from "@/src/components/ReviewCard";
 import { Review } from "@/src/types";
 import { cn } from "@/src/lib/utils";
-import { db, collection, onSnapshot, query, orderBy } from "@/src/lib/firebase";
+import { api } from "@/src/lib/api";
 
 export default function AllReviews() {
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -12,17 +12,17 @@ export default function AllReviews() {
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    const q = query(collection(db, "reviews"), orderBy("created_at", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as Review);
-      setReviews(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore Error:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const fetchReviews = async () => {
+      try {
+        const data = await api.getReviews();
+        setReviews(data);
+      } catch (error) {
+        console.error("API Error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReviews();
   }, []);
 
   const filteredReviews = reviews.filter(r => {

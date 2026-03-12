@@ -8,45 +8,54 @@ import { Users, Star, MessageSquare, TrendingUp, Smile, Frown } from "lucide-rea
 import StatCard from "@/src/components/StatCard";
 import { Stats, Review } from "@/src/types";
 import { cn } from "@/src/lib/utils";
-import { db, collection, onSnapshot, query, orderBy } from "@/src/lib/firebase";
+import { api } from "@/src/lib/api";
 
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [recentReviews, setRecentReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, "reviews"), orderBy("created_at", "desc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const reviewsData = snapshot.docs.map(doc => doc.data() as Review);
-      
-      // Calculate stats
-      const total = reviewsData.length;
-      const avgRating = total > 0 ? reviewsData.reduce((acc, r) => acc + r.rating, 0) / total : 0;
-      const sentiments = reviewsData.reduce((acc: any, r) => {
-        acc[r.sentiment] = (acc[r.sentiment] || 0) + 1;
-        return acc;
-      }, { Positive: 0, Neutral: 0, Negative: 0 });
-
-      setStats({
-        total,
-        avgRating,
-        sentiments
-      });
-      setRecentReviews(reviewsData.slice(0, 5));
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore Error:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const fetchData = async () => {
+      try {
+        const [statsData, reviewsData] = await Promise.all([
+          api.getStats(),
+          api.getReviews()
+        ]);
+        setStats(statsData);
+        setRecentReviews(reviewsData.slice(0, 5));
+      } catch (error: any) {
+        console.error("API Error:", error);
+        setError("Failed to connect to the database. Please ensure your MONGODB_URI is configured correctly in the Settings menu.");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
   }, []);
 
-  if (loading || !stats) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-[80vh]">
         <div className="w-12 h-12 border-4 border-brand-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !stats) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[80vh] p-8 text-center space-y-4">
+        <div className="w-16 h-16 bg-rose-500/10 rounded-full flex items-center justify-center">
+          <Frown className="w-8 h-8 text-rose-500" />
+        </div>
+        <h2 className="text-2xl font-bold">Database Connection Error</h2>
+        <p className="text-slate-400 max-w-md">
+          {error || "We couldn't retrieve the analytics data. This usually happens when the MongoDB connection is not established."}
+        </p>
+        <div className="p-4 bg-white/5 rounded-xl border border-white/10 text-sm text-slate-500">
+          Tip: Check your <code className="text-brand-400">MONGODB_URI</code> in the AI Studio Settings.
+        </div>
       </div>
     );
   }

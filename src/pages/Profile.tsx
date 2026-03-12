@@ -4,7 +4,7 @@ import { Review } from "@/src/types";
 import ReviewCard from "@/src/components/ReviewCard";
 import { cn } from "@/src/lib/utils";
 import { useAuth } from "@/src/components/AuthProvider";
-import { db, collection, query, where, onSnapshot, orderBy } from "@/src/lib/firebase";
+import { api } from "@/src/lib/api";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -12,24 +12,19 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) return;
-
-    const q = query(
-      collection(db, "reviews"), 
-      where("uid", "==", user.uid),
-      orderBy("created_at", "desc")
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as Review);
-      setUserReviews(data);
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore Error:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
+    const fetchUserReviews = async () => {
+      if (!user?.email) return;
+      try {
+        const reviews = await api.getReviews();
+        const filtered = reviews.filter(r => r.email === user.email);
+        setUserReviews(filtered);
+      } catch (error) {
+        console.error("API Error:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchUserReviews();
   }, [user]);
 
   if (!user) return null;

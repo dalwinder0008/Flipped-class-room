@@ -4,7 +4,7 @@ import { Star, Send, Loader2, CheckCircle2, Copy, RefreshCw } from "lucide-react
 import { Link } from "react-router-dom";
 import { analyzeSentiment } from "@/src/lib/gemini";
 import { cn } from "@/src/lib/utils";
-import { db, auth, collection, query, where, getDocs, setDoc, doc, getDoc } from "@/src/lib/firebase";
+import { api } from "@/src/lib/api";
 import { useAuth } from "@/src/components/AuthProvider";
 
 export default function SubmitReview() {
@@ -24,16 +24,15 @@ export default function SubmitReview() {
 
   useEffect(() => {
     const checkExisting = async () => {
-      if (!user) {
+      if (!user?.email) {
         setIsChecking(false);
         return;
       }
       try {
-        const docRef = doc(db, "reviews", user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        const existing = await api.checkExistingReview(user.email);
+        if (existing) {
           setHasSubmitted(true);
-          setResult(docSnap.data());
+          setResult(existing);
           setStep(3);
         }
       } catch (err) {
@@ -69,34 +68,22 @@ export default function SubmitReview() {
     setError(null);
 
     try {
-      // Final check before submission
-      const docRef = doc(db, "reviews", user.uid);
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        setError("You have already submitted a review. Only one review per student is allowed.");
-        setIsSubmitting(false);
-        setHasSubmitted(true);
-        return;
-      }
-
       const analysis = await analyzeSentiment(formData.content);
       const reviewId = generateId();
       
       const reviewData = {
         id: reviewId,
-        student_name: formData.studentName,
+        studentName: formData.studentName,
         email: formData.email,
         rating: formData.rating,
         content: formData.content,
         sentiment: analysis.sentiment,
         confidence: analysis.confidence,
         keywords: analysis.keywords,
-        created_at: new Date().toISOString(),
         uid: user.uid
       };
 
-      await setDoc(doc(db, "reviews", user.uid), reviewData);
+      await api.submitReview(reviewData);
       setResult(reviewData);
       setHasSubmitted(true);
       setStep(3);
